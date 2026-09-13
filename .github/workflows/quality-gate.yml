@@ -1,0 +1,138 @@
+name: 🛡️ Quality Gate Pipeline (Code, Security & BDD)
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # =========================================================================
+  # GATE 1: TypeScript & Code Standards Gate
+  # =========================================================================
+  code-standards:
+    name: 📐 1. TypeScript & Code Standards
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: 🟢 Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Instalar dependencias
+        run: npm ci
+
+      - name: 🔍 Verificación estricta de tipos TypeScript
+        run: npm run typecheck
+
+  # =========================================================================
+  # GATE 2: Security Gate (Gitleaks & Dependencies Audit)
+  # =========================================================================
+  security-gate:
+    name: 🔒 2. Security & Secrets Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Clonar repositorio con historial completo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🔑 Escaneo de Secretos y Credenciales (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🟢 Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Instalar dependencias
+        run: npm ci
+
+      - name: 🛡️ Auditoría de Seguridad de Dependencias (NPM Audit)
+        run: npm run security:audit
+
+  # =========================================================================
+  # GATE 3: BDD Contract & Step Definition Coverage Gate
+  # =========================================================================
+  bdd-validation:
+    name: 🥒 3. BDD Gherkin & Step Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: 🟢 Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: 📦 Instalar dependencias
+        run: npm ci
+
+      - name: ⚡ Validación de Contratos BDD (Cucumber Dry-Run)
+        run: npm run test:dry-run
+
+  # =========================================================================
+  # GATE 4: E2E Test Execution (Se ejecuta tras pasar los 3 gates previos)
+  # =========================================================================
+  e2e-execution:
+    name: 🎭 4. E2E Playwright & Serenity Execution
+    needs: [code-standards, security-gate, bdd-validation]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      HEADLESS: "true"
+      BROWSER: "chromium"
+      DEFAULT_TIMEOUT: "30000"
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: 🟢 Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: ☕ Configurar Java (Serenity BDD Reporter)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📦 Instalar dependencias
+        run: npm ci
+
+      - name: 🎭 Instalar navegadores Playwright y binarios del SO
+        run: npx playwright install --with-deps chromium
+
+      - name: 🚀 Ejecutar pruebas E2E automatizadas
+        run: npx cucumber-js --tags "@orangehrm"
+
+      - name: 📊 Generar reporte Serenity BDD
+        if: always()
+        run: npm run test:report || echo "Report generation step completed"
+
+      - name: 📤 Publicar artefactos y reportes Serenity
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: serenity-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            target/
+            .serenity/
+          retention-days: 14

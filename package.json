@@ -5,6 +5,9 @@
   "main": "cucumber.js",
   "scripts": {
     "clean": "rimraf target/ .serenity/ test-results/",
+    "typecheck": "tsc --noEmit",
+    "test:dry-run": "cucumber-js --dry-run",
+    "security:audit": "npm audit --audit-level=critical",
     "test": "cucumber-js --tags @orangehrm",
     "test:ui": "cucumber-js --tags \"@ui\"",
     "test:api": "cucumber-js --tags \"@api\"",
