@@ -1,0 +1,76 @@
+name: E2E Automation Pipeline (Playwright & Serenity)
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: 'Tags de Cucumber a ejecutar (ej: @orangehrm, @ui, @api)'
+        required: false
+        default: '@orangehrm'
+      browser:
+        description: 'Navegador para las pruebas'
+        required: false
+        default: 'chromium'
+        type: choice
+        options:
+          - chromium
+          - firefox
+          - webkit
+
+jobs:
+  test:
+    name: 🧪 Run E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      HEADLESS: "true"
+      BROWSER: ${{ github.event.inputs.browser || 'chromium' }}
+      DEFAULT_TIMEOUT: "30000"
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: 🟢 Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: ☕ Configurar Java (Requerido por Serenity BDD Reporter)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 📦 Instalar dependencias del proyecto
+        run: npm ci
+
+      - name: 🎭 Instalar navegadores de Playwright y dependencias del SO
+        run: npx playwright install --with-deps ${{ github.event.inputs.browser || 'chromium' }}
+
+      - name: 🚀 Ejecutar pruebas automatizadas
+        run: |
+          TAGS="${{ github.event.inputs.tags || '@orangehrm' }}"
+          echo "Ejecutando pruebas con tag: $TAGS en navegador: $BROWSER"
+          npx cucumber-js --tags "$TAGS"
+
+      - name: 📊 Generar reporte Serenity BDD
+        if: always()
+        run: |
+          npm run test:report || echo "Serenity CLI report generation completed or skipped"
+
+      - name: 📤 Publicar reportes de ejecución (Cucumber & Serenity)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            target/
+            .serenity/
+          retention-days: 14
