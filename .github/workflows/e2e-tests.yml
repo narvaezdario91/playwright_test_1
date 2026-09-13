@@ -1,10 +1,6 @@
-name: E2E Automation Pipeline (Playwright & Serenity)
+name: 🎯 Manual E2E Runner (Custom Tags & Browsers)
 
 on:
-  push:
-    branches: [ main, master, develop ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
     inputs:
       tags:
